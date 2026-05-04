@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+
+<html lang="ja">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>スクリプトチェッカー</title>
+
+<style>
+
+body {
+
+  margin: 0;
+
+  font-family: sans-serif;
+
+  background: #343541;
+
+  color: white;
+
+}
+
+.chat {
+
+  padding: 10px;
+
+  padding-bottom: 100px;
+
+}
+
+.user, .ai {
+
+  padding: 12px;
+
+  margin: 8px;
+
+  border-radius: 10px;
+
+  max-width: 90%;
+
+  white-space: pre-wrap;
+
+}
+
+.user {
+
+  background: #444654;
+
+  margin-left: auto;
+
+}
+
+.ai {
+
+  background: #3e3f4b;
+
+}
+
+.input-area {
+
+  position: fixed;
+
+  bottom: 0;
+
+  width: 100%;
+
+  display: flex;
+
+  background: #343541;
+
+  padding: 10px;
+
+}
+
+textarea {
+
+  flex: 1;
+
+  resize: none;
+
+  height: 60px;
+
+  border-radius: 8px;
+
+  border: none;
+
+  padding: 10px;
+
+  font-size: 14px;
+
+}
+
+button {
+
+  margin-left: 8px;
+
+  padding: 10px;
+
+  border: none;
+
+  border-radius: 8px;
+
+  background: #19c37d;
+
+  color: black;
+
+  font-weight: bold;
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="chat" id="chat"></div>
+
+<div class="input-area">
+
+  <textarea id="code" placeholder="スクリプトを貼ってください"></textarea>
+
+  <button onclick="send()">送信</button>
+
+</div>
+
+<script>
+
+function send() {
+
+  const code = document.getElementById("code").value;
+
+  if (!code) return;
+
+  addMessage(code, "user");
+
+  const result = analyze(code);
+
+  setTimeout(() => {
+
+    addMessage(result, "ai");
+
+  }, 300);
+
+  document.getElementById("code").value = "";
+
+}
+
+function addMessage(text, type) {
+
+  const chat = document.getElementById("chat");
+
+  const div = document.createElement("div");
+
+  div.className = type;
+
+  div.innerText = text;
+
+  chat.appendChild(div);
+
+  chat.scrollTop = chat.scrollHeight;
+
+}
+
+function analyze(code) {
+
+  let warnings = [];
+
+  let score = 0;
+
+  if (code.includes("loadstring")) {
+
+    score += 3;
+
+    warnings.push("・loadstringが使われています（外部コード実行の可能性）");
+
+  }
+
+  if (code.includes("HttpGet")) {
+
+    score += 2;
+
+    warnings.push("・外部通信が含まれています");
+
+  }
+
+  if (code.match(/https?:\/\/?/)) {
+
+    score += 2;
+
+    warnings.push("・URLが含まれています");
+
+  }
+
+  if (code.match(/webhook|post|request/i)) {
+
+    score += 3;
+
+    warnings.push("・データ送信の可能性があります");
+
+  }
+
+  if (code.length > 1000) {
+
+    score += 1;
+
+    warnings.push("・コードが長く難読化の可能性があります");
+
+  }
+
+  let level = "🟢 低リスク";
+
+  if (score > 2) level = "🟡 注意";
+
+  if (score > 5) level = "🔴 危険";
+
+  let text = "解析結果： " + level + "\n\n";
+
+  if (warnings.length === 0) {
+
+    text += "目立った危険な特徴は見つかりませんでした。\nただし安全を保証するものではありません。";
+
+  } else {
+
+    text += "注意点：\n" + warnings.join("\n");
+
+  }
+
+  return text;
+
+}
+
+// 初期メッセージ（これが重要）
+
+addMessage("スクリプトを貼って送信すると安全性をチェックします。", "ai");
+
+</script>
+
+</body>
+
+</html>
