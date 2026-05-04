@@ -8,7 +8,7 @@
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>スクリプトチェッカー</title>
+<title>最強スクリプトチェッカー</title>
 
 <style>
 
@@ -46,19 +46,9 @@ body {
 
 }
 
-.user {
+.user { background: #444654; margin-left: auto; }
 
-  background: #444654;
-
-  margin-left: auto;
-
-}
-
-.ai {
-
-  background: #3e3f4b;
-
-}
+.ai { background: #3e3f4b; }
 
 .input-area {
 
@@ -80,8 +70,6 @@ textarea {
 
   flex: 1;
 
-  resize: none;
-
   height: 60px;
 
   border-radius: 8px;
@@ -89,8 +77,6 @@ textarea {
   border: none;
 
   padding: 10px;
-
-  font-size: 14px;
 
 }
 
@@ -100,15 +86,29 @@ button {
 
   padding: 10px;
 
-  border: none;
-
   border-radius: 8px;
+
+  border: none;
 
   background: #19c37d;
 
-  color: black;
-
   font-weight: bold;
+
+}
+
+/* ハイライト */
+
+.danger { color: #ff4d4d; font-weight: bold; }
+
+.warn { color: #ffd166; font-weight: bold; }
+
+pre {
+
+  background: black;
+
+  padding: 10px;
+
+  overflow-x: auto;
 
 }
 
@@ -122,7 +122,7 @@ button {
 
 <div class="input-area">
 
-  <textarea id="code" placeholder="スクリプトを貼ってください"></textarea>
+  <textarea id="code" placeholder="コード or URLを貼ってください"></textarea>
 
   <button onclick="send()">送信</button>
 
@@ -130,103 +130,177 @@ button {
 
 <script>
 
-function send() {
+// ===== ハイライト =====
 
-  const code = document.getElementById("code").value;
+function highlightCode(code) {
 
-  if (!code) return;
+  let h = code;
 
-  addMessage(code, "user");
+  const danger = ["loadstring","HttpGet","webhook","request","setclipboard","getgenv","LocalPlayer"];
 
-  const result = analyze(code);
+  danger.forEach(w=>{
 
-  setTimeout(() => {
+    h = h.replace(new RegExp(w,"gi"), `<span class="danger">${w}</span>`);
 
-    addMessage(result, "ai");
+  });
 
-  }, 300);
+  const warn = ["game:","Instance.new","workspace","Players"];
 
-  document.getElementById("code").value = "";
+  warn.forEach(w=>{
+
+    h = h.replace(new RegExp(w,"gi"), `<span class="warn">${w}</span>`);
+
+  });
+
+  h = h.replace(/https?:\/\/\S+/g,'<span class="danger">$&</span>');
+
+  return h;
 
 }
 
-function addMessage(text, type) {
+// ===== メッセージ =====
 
-  const chat = document.getElementById("chat");
+function addMessage(text,type,isCode=false){
 
-  const div = document.createElement("div");
+  const chat=document.getElementById("chat");
 
-  div.className = type;
+  const div=document.createElement("div");
 
-  div.innerText = text;
+  div.className=type;
+
+  if(isCode){
+
+    div.innerHTML="<pre>"+highlightCode(text)+"</pre>";
+
+  }else{
+
+    div.innerText=text;
+
+  }
 
   chat.appendChild(div);
 
-  chat.scrollTop = chat.scrollHeight;
+  chat.scrollTop=chat.scrollHeight;
 
 }
 
-function analyze(code) {
+// ===== Base64解除 =====
 
-  let warnings = [];
+function decodeBase64(code){
 
-  let score = 0;
+  let out=[];
 
-  if (code.includes("loadstring")) {
+  let m=code.match(/[A-Za-z0-9+/=]{40,}/g);
 
-    score += 3;
+  if(m){
 
-    warnings.push("・loadstringが使われています（外部コード実行の可能性）");
+    m.forEach(s=>{
 
-  }
+      try{
 
-  if (code.includes("HttpGet")) {
+        let d=atob(s);
 
-    score += 2;
+        if(d.match(/[a-z]/i)) out.push(d);
 
-    warnings.push("・外部通信が含まれています");
+      }catch{}
 
-  }
-
-  if (code.match(/https?:\/\/?/)) {
-
-    score += 2;
-
-    warnings.push("・URLが含まれています");
+    });
 
   }
 
-  if (code.match(/webhook|post|request/i)) {
+  return out;
 
-    score += 3;
+}
 
-    warnings.push("・データ送信の可能性があります");
+// ===== 解析 =====
+
+function analyze(code){
+
+  let warnings=[];
+
+  let score=0;
+
+  // 危険
+
+  if(code.includes("loadstring")){score+=3;warnings.push("・外部コード実行");}
+
+  if(code.includes("HttpGet")){score+=2;warnings.push("・外部通信");}
+
+  if(code.match(/https?:\/\//)){score+=2;warnings.push("・URLあり");}
+
+  if(code.match(/webhook|request|post/i)){score+=3;warnings.push("・データ送信");}
+
+  // ロガー検出
+
+  let logger=[];
+
+  if(code.match(/LocalPlayer|UserId|Name/i)) logger.push("・ユーザー情報取得");
+
+  if(code.match(/HttpGet|request|webhook/i)) logger.push("・外部送信");
+
+  if(logger.length>=2){
+
+    warnings.push("⚠️ ロガーの可能性");
+
+    score+=3;
 
   }
 
-  if (code.length > 1000) {
+  // Roblox判定
 
-    score += 1;
+  let roblox="🟡 不明";
 
-    warnings.push("・コードが長く難読化の可能性があります");
+  if(code.match(/game:|Instance\.new|workspace|Players|Humanoid/i)){
+
+    roblox="🟢 Roblox用";
+
+  }else if(code.match(/require|fs|import/i)){
+
+    roblox="🔴 Robloxではない";
 
   }
 
-  let level = "🟢 低リスク";
+  // Delta判定
 
-  if (score > 2) level = "🟡 注意";
+  let delta="🟡 不明";
 
-  if (score > 5) level = "🔴 危険";
+  if(code.includes("loadstring")||code.includes("HttpGet")){
 
-  let text = "解析結果： " + level + "\n\n";
+    delta="🟢 実行できる可能性あり";
 
-  if (warnings.length === 0) {
+  }
 
-    text += "目立った危険な特徴は見つかりませんでした。\nただし安全を保証するものではありません。";
+  // 難読化解除
 
-  } else {
+  let decoded=decodeBase64(code);
 
-    text += "注意点：\n" + warnings.join("\n");
+  // レベル
+
+  let level="🟢 低リスク";
+
+  if(score>2) level="🟡 注意";
+
+  if(score>5) level="🔴 危険";
+
+  let text="解析結果："+level+"\n\n";
+
+  if(warnings.length){
+
+    text+="注意点:\n"+warnings.join("\n");
+
+  }else{
+
+    text+="目立った危険なし";
+
+  }
+
+  text+="\n\nRoblox判定:\n"+roblox;
+
+  text+="\n\n実行判定:\n"+delta;
+
+  if(decoded.length){
+
+    text+="\n\n難読化解除:\n"+decoded.join("\n\n");
 
   }
 
@@ -234,9 +308,55 @@ function analyze(code) {
 
 }
 
-// 初期メッセージ（これが重要）
+// ===== URL取得 =====
 
-addMessage("スクリプトを貼って送信すると安全性をチェックします。", "ai");
+async function fetchAndAnalyze(url){
+
+  try{
+
+    const r=await fetch(url);
+
+    const code=await r.text();
+
+    addMessage(code,"user",true);
+
+    addMessage(analyze(code),"ai");
+
+  }catch{
+
+    addMessage("URL取得失敗（制限の可能性）","ai");
+
+  }
+
+}
+
+// ===== 送信 =====
+
+function send(){
+
+  const input=document.getElementById("code").value;
+
+  if(!input) return;
+
+  if(input.startsWith("http")){
+
+    fetchAndAnalyze(input);
+
+  }else{
+
+    addMessage(input,"user",true);
+
+    addMessage(analyze(input),"ai");
+
+  }
+
+  document.getElementById("code").value="";
+
+}
+
+// 初期メッセージ
+
+addMessage("コードやURLを貼ると解析します","ai");
 
 </script>
 
